@@ -1,10 +1,10 @@
 /**
- * fetch.js (FINAL – STABLE)
+ * fetch.js
  * Runs in GitHub Actions
+ * Uses Node 18 native fetch (NO node-fetch)
  */
 
-const fs = require("fs");
-const fetch = require("node-fetch");
+import fs from "fs";
 
 const LOCATIONS_FILE = "./locations.json";
 const DAYS = 8;
@@ -15,29 +15,33 @@ const WP_ENDPOINT = process.env.WP_ENDPOINT;
 const WP_SECRET = process.env.WP_SECRET;
 
 if (!API_KEY || !WP_ENDPOINT || !WP_SECRET) {
-  console.error("❌ Missing env variables");
+  console.error("❌ Missing environment variables");
   process.exit(1);
 }
 
 const locations = JSON.parse(fs.readFileSync(LOCATIONS_FILE, "utf8"));
 
 async function fetchWeather(lat, lon) {
-  const controller = new AbortController();
-  setTimeout(() => controller.abort(), 15000); // ⏱ 15s timeout
+  const url =
+    `${OPENWEATHER_API}?lat=${lat}&lon=${lon}` +
+    `&exclude=minutely,hourly,alerts&units=metric&appid=${API_KEY}`;
 
-  const url = `${OPENWEATHER_API}?lat=${lat}&lon=${lon}&exclude=minutely,hourly,alerts&units=metric&appid=${API_KEY}`;
-  const res = await fetch(url, { signal: controller.signal });
+  const res = await fetch(url);
 
-  if (!res.ok) throw new Error("OpenWeather failed");
+  if (!res.ok) {
+    throw new Error(`OpenWeather failed: ${res.status}`);
+  }
+
   return res.json();
 }
 
-(async () => {
-  try {
-    const payload = [];
+async function run() {
+  const payload = [];
 
-    for (const loc of locations) {
+  for (const loc of locations) {
+    try {
       console.log(`🌤 Fetching ${loc.label}`);
+
       const data = await fetchWeather(loc.lat, loc.lon);
 
       payload.push({
@@ -45,25 +49,33 @@ async function fetchWeather(lat, lon) {
         lon: loc.lon,
         daily: data.daily.slice(0, DAYS),
       });
+
+    } catch (err) {
+      console.error(`⚠ ${loc.label} failed`, err.message);
     }
+  }
 
-    console.log("📤 Sending to WordPress…");
-
-    const res = await fetch(WP_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-cwf-secret": WP_SECRET,
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const text = await res.text();
-    console.log("✅ WP response:", text);
-
-    process.exit(0); // 🔥 VERY IMPORTANT
-  } catch (err) {
-    console.error("❌ Error:", err.message);
+  if (!payload.length) {
+    console.error("❌ No data fetched");
     process.exit(1);
   }
-})();
+
+  console.log("📤 Sending to WordPress…");
+
+  const res = await fetch(WP_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-cwf-secret": WP_SECRET,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const text = await res.text();
+  console.log("✅ WordPress response:", text);
+}
+
+run().catch(err => {
+  console.error("❌ Fatal error", err);
+  process.exit(1);
+});
