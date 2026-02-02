@@ -1,11 +1,8 @@
 /**
- * fetch.js (FINAL)
- * Runs in GitHub Actions
- * CommonJS + node-fetch@2 compatible
+ * fetch.js — FINAL (Node 18 native fetch)
  */
 
 const fs = require("fs");
-const fetch = require("node-fetch");
 
 const LOCATIONS_FILE = "./locations.json";
 const DAYS = 8;
@@ -17,7 +14,7 @@ const WP_ENDPOINT = process.env.WP_ENDPOINT;
 const WP_SECRET = process.env.WP_SECRET;
 
 if (!API_KEY || !WP_ENDPOINT || !WP_SECRET) {
-  console.error("❌ Missing required environment variables");
+  console.error("❌ Missing env vars");
   process.exit(1);
 }
 
@@ -30,7 +27,7 @@ async function fetchWeather(lat, lon) {
 
   const res = await fetch(url);
   if (!res.ok) {
-    throw new Error(`OpenWeather failed: ${res.status}`);
+    throw new Error(`OpenWeather failed ${res.status}`);
   }
   return res.json();
 }
@@ -40,8 +37,7 @@ async function fetchWeather(lat, lon) {
 
   for (const loc of locations) {
     try {
-      console.log(`🌤 Fetching: ${loc.label}`);
-
+      console.log(`🌤 Fetching ${loc.label}`);
       const data = await fetchWeather(loc.lat, loc.lon);
 
       payload.push({
@@ -49,18 +45,17 @@ async function fetchWeather(lat, lon) {
         lon: loc.lon,
         daily: data.daily.slice(0, DAYS),
       });
-
-    } catch (err) {
-      console.error(`⚠ Failed for ${loc.label}:`, err.message);
+    } catch (e) {
+      console.error(`⚠ ${loc.label} failed`, e.message);
     }
   }
 
   if (!payload.length) {
-    console.error("❌ No data fetched at all");
+    console.error("❌ No data fetched");
     process.exit(1);
   }
 
-  console.log("📤 Sending data to WordPress…");
+  console.log("📤 Sending to WordPress");
 
   const res = await fetch(WP_ENDPOINT, {
     method: "POST",
@@ -71,6 +66,5 @@ async function fetchWeather(lat, lon) {
     body: JSON.stringify(payload),
   });
 
-  const text = await res.text();
-  console.log("✅ WP Response:", text);
+  console.log("✅ WP response:", await res.text());
 })();
