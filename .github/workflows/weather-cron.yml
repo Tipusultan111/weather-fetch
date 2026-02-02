@@ -1,0 +1,25 @@
+name: Weather Cron Fetch
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      - run: npm install node-fetch
+
+      - run: node fetch.js
+        env:
+          OPENWEATHER_API: ${{ secrets.OPENWEATHER_API }}
+          WP_ENDPOINT: ${{ secrets.WP_ENDPOINT }}
+          WP_SECRET: ${{ secrets.WP_SECRET }}
