@@ -1,25 +1,29 @@
-name: Weather Cron Fetch
+name: Weather Fetch Cron
 
 on:
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: "*/30 * * * *"   # every 30 minutes
   workflow_dispatch:
 
 jobs:
-  fetch:
+  fetch-weather:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v3
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 18
 
-      - run: npm install node-fetch
+      - name: Install dependencies
+        run: npm install node-fetch@3
 
-      - run: node fetch.js
+      - name: Run weather fetch
         env:
-          OPENWEATHER_API: ${{ secrets.OPENWEATHER_API }}
+          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
           WP_ENDPOINT: ${{ secrets.WP_ENDPOINT }}
           WP_SECRET: ${{ secrets.WP_SECRET }}
+        run: node fetch.js
