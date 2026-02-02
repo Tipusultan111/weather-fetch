@@ -1,43 +1,70 @@
-const fs = require('fs');
-const fetch = require('node-fetch');
+/**
+ * fetch.js
+ * Runs in GitHub Actions
+ * Fetches OpenWeather data and pushes to WordPress
+ */
 
-const API_KEY = process.env.OPENWEATHER_API;
+import fs from "fs";
+import fetch from "node-fetch";
+
+const LOCATIONS_FILE = "./locations.json";
+const DAYS = 8;
+
+const OPENWEATHER_API = "https://api.openweathermap.org/data/3.0/onecall";
+const API_KEY = process.env.OPENWEATHER_API_KEY;
 const WP_ENDPOINT = process.env.WP_ENDPOINT;
 const WP_SECRET = process.env.WP_SECRET;
 
-const locations = JSON.parse(fs.readFileSync('./locations.json', 'utf8'));
+if (!API_KEY || !WP_ENDPOINT || !WP_SECRET) {
+  console.error("❌ Missing required environment variables");
+  process.exit(1);
+}
 
-async function run() {
-  const results = {};
+const locations = JSON.parse(fs.readFileSync(LOCATIONS_FILE, "utf8"));
+
+async function fetchWeather(lat, lon) {
+  const url = `${OPENWEATHER_API}?lat=${lat}&lon=${lon}&exclude=minutely,hourly,alerts&units=metric&appid=${API_KEY}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("OpenWeather API failed");
+  return res.json();
+}
+
+(async () => {
+  const payload = [];
 
   for (const loc of locations) {
     try {
-      const url = `https://api.openweathermap.org/data/2.5/forecast?lat=${loc.lat}&lon=${loc.lon}&units=metric&appid=${API_KEY}`;
-      const res = await fetch(url);
-      const data = await res.json();
+      console.log(`🌤 Fetching: ${loc.label}`);
 
-      if (!data.list) continue;
+      const data = await fetchWeather(loc.lat, loc.lon);
 
-      results[loc.slug] = {
-        name: loc.name,
-        country: loc.country,
-        forecast: data.list.slice(0, 24)
-      };
-    } catch (e) {
-      console.error('Error for', loc.name);
+      payload.push({
+        lat: loc.lat,
+        lon: loc.lon,
+        daily: data.daily.slice(0, DAYS),
+      });
+
+    } catch (err) {
+      console.error(`⚠ Failed for ${loc.label}`, err.message);
     }
   }
 
-  await fetch(WP_ENDPOINT, {
-    method: 'POST',
+  if (!payload.length) {
+    console.log("❌ No data fetched");
+    process.exit(0);
+  }
+
+  console.log("📤 Sending data to WordPress…");
+
+  const res = await fetch(WP_ENDPOINT, {
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json',
-      'X-WP-SECRET': WP_SECRET
+      "Content-Type": "application/json",
+      "x-cwf-secret": WP_SECRET,
     },
-    body: JSON.stringify(results)
+    body: JSON.stringify(payload),
   });
 
-  console.log('Weather cache pushed successfully');
-}
-
-run();
+  const text = await res.text();
+  console.log("✅ WP Response:", text);
+})();
