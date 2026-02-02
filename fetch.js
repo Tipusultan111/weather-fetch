@@ -36,19 +36,29 @@ async function fetchWeather(lat, lon) {
   const payload = [];
 
   for (const loc of locations) {
-    try {
-      console.log(`🌤 Fetching ${loc.label}`);
-      const data = await fetchWeather(loc.lat, loc.lon);
-
-      payload.push({
-        lat: loc.lat,
-        lon: loc.lon,
-        daily: data.daily.slice(0, DAYS),
-      });
-    } catch (e) {
-      console.error(`⚠ ${loc.label} failed`, e.message);
-    }
+  if (!loc.lat || !loc.lon || !loc.label) {
+    console.log("⏭ Skipping invalid location", loc);
+    continue;
   }
+
+  try {
+    console.log(`🌤 Fetching ${loc.label}`);
+    const data = await fetchWeather(loc.lat, loc.lon);
+
+    payload.push({
+      lat: loc.lat,
+      lon: loc.lon,
+      daily: data.daily.slice(0, DAYS),
+    });
+
+    // ⏱ rate-limit safety (IMPORTANT)
+    await new Promise(r => setTimeout(r, 1200));
+
+  } catch (e) {
+    console.error(`⚠ ${loc.label} failed`, e.message);
+  }
+}
+
 
   if (!payload.length) {
     console.error("❌ No data fetched");
