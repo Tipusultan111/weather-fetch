@@ -1,11 +1,11 @@
 /**
- * fetch.js
- * Runs in GitHub Actions (CommonJS compatible)
+ * fetch.js (CommonJS – STABLE)
+ * Runs in GitHub Actions
+ * Fetches OpenWeather data and pushes to WordPress
  */
 
 const fs = require("fs");
-const fetch = (...args) =>
-  import("node-fetch").then(({ default: fetch }) => fetch(...args));
+const fetch = require("node-fetch");
 
 const LOCATIONS_FILE = "./locations.json";
 const DAYS = 8;
@@ -23,11 +23,16 @@ if (!API_KEY || !WP_ENDPOINT || !WP_SECRET) {
 const locations = JSON.parse(fs.readFileSync(LOCATIONS_FILE, "utf8"));
 
 async function fetchWeather(lat, lon) {
-  const url = `${OPENWEATHER_API}?lat=${lat}&lon=${lon}&exclude=minutely,hourly,alerts&units=metric&appid=${API_KEY}`;
+  const url =
+    `${OPENWEATHER_API}?lat=${lat}&lon=${lon}` +
+    `&exclude=minutely,hourly,alerts&units=metric&appid=${API_KEY}`;
+
   const res = await fetch(url);
+
   if (!res.ok) {
-    throw new Error(`OpenWeather failed: ${res.status}`);
+    throw new Error(`OpenWeather API failed (${res.status})`);
   }
+
   return res.json();
 }
 
@@ -37,7 +42,10 @@ async function fetchWeather(lat, lon) {
   for (const loc of locations) {
     try {
       console.log(`🌤 Fetching: ${loc.label}`);
+
       const data = await fetchWeather(loc.lat, loc.lon);
+
+      if (!data.daily) throw new Error("No daily data");
 
       payload.push({
         lat: loc.lat,
@@ -51,8 +59,8 @@ async function fetchWeather(lat, lon) {
   }
 
   if (!payload.length) {
-    console.log("❌ No data fetched, exiting safely");
-    process.exit(0);
+    console.error("❌ No data fetched for any location");
+    process.exit(1);
   }
 
   console.log("📤 Sending data to WordPress…");
@@ -67,5 +75,10 @@ async function fetchWeather(lat, lon) {
   });
 
   const text = await res.text();
-  console.log("✅ WP Response:", text);
+
+  console.log("✅ WordPress response:", text);
+
+  if (!res.ok) {
+    process.exit(1);
+  }
 })();
