@@ -1,21 +1,23 @@
 /**
- * fetch.js
+ * fetch.js (FINAL)
  * Runs in GitHub Actions
- * Uses Node 18 native fetch (NO node-fetch)
+ * CommonJS + node-fetch@2 compatible
  */
 
-import fs from "fs";
+const fs = require("fs");
+const fetch = require("node-fetch");
 
 const LOCATIONS_FILE = "./locations.json";
 const DAYS = 8;
 
 const OPENWEATHER_API = "https://api.openweathermap.org/data/3.0/onecall";
+
 const API_KEY = process.env.OPENWEATHER_API_KEY;
 const WP_ENDPOINT = process.env.WP_ENDPOINT;
 const WP_SECRET = process.env.WP_SECRET;
 
 if (!API_KEY || !WP_ENDPOINT || !WP_SECRET) {
-  console.error("❌ Missing environment variables");
+  console.error("❌ Missing required environment variables");
   process.exit(1);
 }
 
@@ -27,20 +29,18 @@ async function fetchWeather(lat, lon) {
     `&exclude=minutely,hourly,alerts&units=metric&appid=${API_KEY}`;
 
   const res = await fetch(url);
-
   if (!res.ok) {
     throw new Error(`OpenWeather failed: ${res.status}`);
   }
-
   return res.json();
 }
 
-async function run() {
+(async () => {
   const payload = [];
 
   for (const loc of locations) {
     try {
-      console.log(`🌤 Fetching ${loc.label}`);
+      console.log(`🌤 Fetching: ${loc.label}`);
 
       const data = await fetchWeather(loc.lat, loc.lon);
 
@@ -51,16 +51,16 @@ async function run() {
       });
 
     } catch (err) {
-      console.error(`⚠ ${loc.label} failed`, err.message);
+      console.error(`⚠ Failed for ${loc.label}:`, err.message);
     }
   }
 
   if (!payload.length) {
-    console.error("❌ No data fetched");
+    console.error("❌ No data fetched at all");
     process.exit(1);
   }
 
-  console.log("📤 Sending to WordPress…");
+  console.log("📤 Sending data to WordPress…");
 
   const res = await fetch(WP_ENDPOINT, {
     method: "POST",
@@ -72,10 +72,5 @@ async function run() {
   });
 
   const text = await res.text();
-  console.log("✅ WordPress response:", text);
-}
-
-run().catch(err => {
-  console.error("❌ Fatal error", err);
-  process.exit(1);
-});
+  console.log("✅ WP Response:", text);
+})();
