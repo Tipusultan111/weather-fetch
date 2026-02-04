@@ -8,7 +8,6 @@ on:
 jobs:
   fetch-weather:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
 
     steps:
       - uses: actions/checkout@v4
@@ -16,6 +15,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 18
+
+      - name: Install dependencies
+        run: npm install node-fetch@2
 
       - name: Run fetch
         env:
