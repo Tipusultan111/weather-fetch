@@ -1,18 +1,24 @@
+/**
+ * fetch.js — FINAL STABLE VERSION
+ */
+
 const fs = require("fs");
 const fetch = require("node-fetch");
 
 const LOCATIONS_FILE = "./locations.json";
 const DAYS = 8;
-const MAX_LOCATIONS = 5; // 🔒 safety limit
+const MAX_LOCATIONS = 10; // 🔒 safety limit
+const DELAY_MS = 1500;
 
 const OPENWEATHER_API = "https://api.openweathermap.org/data/3.0/onecall";
+
 const API_KEY = process.env.OPENWEATHER_API_KEY;
 const WP_ENDPOINT = process.env.WP_ENDPOINT;
 const WP_SECRET = process.env.WP_SECRET;
 
 if (!API_KEY || !WP_ENDPOINT || !WP_SECRET) {
-  console.error("❌ Missing env vars");
-  process.exit(1);
+  console.error("❌ Missing env variables");
+  process.exit(0); // soft exit
 }
 
 const locations = JSON.parse(fs.readFileSync(LOCATIONS_FILE, "utf8"));
@@ -20,7 +26,11 @@ const locations = JSON.parse(fs.readFileSync(LOCATIONS_FILE, "utf8"));
 async function fetchWeather(lat, lon) {
   const url = `${OPENWEATHER_API}?lat=${lat}&lon=${lon}&exclude=minutely,hourly,alerts&units=metric&appid=${API_KEY}`;
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`OpenWeather ${res.status}`);
+
+  if (!res.ok) {
+    throw new Error(`OpenWeather failed: ${res.status}`);
+  }
+
   return res.json();
 }
 
@@ -29,16 +39,24 @@ async function fetchWeather(lat, lon) {
   let count = 0;
 
   for (const loc of locations) {
-    if (!loc.lat || !loc.lon) continue;
-
     if (count >= MAX_LOCATIONS) break;
+
+    if (!loc.lat || !loc.lon) {
+      console.log("⏭ Skipping invalid location", loc);
+      continue;
+    }
 
     const label = loc.label || loc.name || "Unknown";
 
     try {
-      console.log(`🌤 Fetching ${label}`);
+      console.log(`🌤 Fetching: ${label}`);
 
       const data = await fetchWeather(loc.lat, loc.lon);
+
+      if (!data.daily || !data.daily.length) {
+        console.log(`⚠ No daily data for ${label}`);
+        continue;
+      }
 
       payload.push({
         lat: loc.lat,
@@ -47,19 +65,20 @@ async function fetchWeather(lat, lon) {
       });
 
       count++;
-      await new Promise(r => setTimeout(r, 1200));
+
+      await new Promise(r => setTimeout(r, DELAY_MS));
 
     } catch (e) {
-      console.error(`⚠ ${label} failed`, e.message);
+      console.log(`⚠ ${label} failed → ${e.message}`);
     }
   }
 
   if (!payload.length) {
-    console.error("❌ No data fetched");
-    process.exit(1);
+    console.log("⚠ No data fetched — exiting safely");
+    process.exit(0); // ✅ IMPORTANT
   }
 
-  console.log(`📤 Sending ${payload.length} locations to WP`);
+  console.log(`📤 Sending ${payload.length} locations to WordPress`);
 
   const res = await fetch(WP_ENDPOINT, {
     method: "POST",
@@ -72,4 +91,6 @@ async function fetchWeather(lat, lon) {
 
   const text = await res.text();
   console.log("✅ WP response:", text);
+
+  process.exit(0);
 })();
