@@ -1,96 +1,102 @@
-/**
- * fetch.js — FINAL STABLE VERSION
- */
+import fs from "fs";
+import fetch from "node-fetch";
 
-const fs = require("fs");
-const fetch = require("node-fetch");
+/* ==============================
+   CONFIG
+============================== */
 
-const LOCATIONS_FILE = "./locations.json";
+const WORDPRESS_ENDPOINT = process.env.WP_ENDPOINT; // https://site.com/wp-json/cwf/v1/push
+const SECRET = process.env.CWF_SECRET;
+
+const BATCH_SIZE = 10;            // per run (safe)
+const DELAY_MS = 1200;            // rate-limit safety
 const DAYS = 8;
-const MAX_LOCATIONS = 10; // 🔒 safety limit
-const DELAY_MS = 1500;
 
-const OPENWEATHER_API = "https://api.openweathermap.org/data/3.0/onecall";
+/* ==============================
+   LOAD LOCATIONS
+============================== */
 
-const API_KEY = process.env.OPENWEATHER_API_KEY;
-const WP_ENDPOINT = process.env.WP_ENDPOINT;
-const WP_SECRET = process.env.WP_SECRET;
+const locations = JSON.parse(
+  fs.readFileSync("./locations.json", "utf8")
+);
 
-if (!API_KEY || !WP_ENDPOINT || !WP_SECRET) {
-  console.error("❌ Missing env variables");
-  process.exit(0); // soft exit
+/* ==============================
+   BATCH OFFSET (RESUME SUPPORT)
+============================== */
+
+const START_INDEX = Number(process.env.START || 0);
+const batch = locations.slice(START_INDEX, START_INDEX + BATCH_SIZE);
+
+if (!batch.length) {
+  console.log("✅ All locations already processed.");
+  process.exit(0);
 }
 
-const locations = JSON.parse(fs.readFileSync(LOCATIONS_FILE, "utf8"));
+console.log(`🚀 Processing locations ${START_INDEX} → ${START_INDEX + batch.length - 1}`);
+
+/* ==============================
+   WEATHER FETCH
+============================== */
 
 async function fetchWeather(lat, lon) {
-  const url = `${OPENWEATHER_API}?lat=${lat}&lon=${lon}&exclude=minutely,hourly,alerts&units=metric&appid=${API_KEY}`;
+  const url =
+    `https://api.open-meteo.com/v1/forecast` +
+    `?latitude=${lat}&longitude=${lon}` +
+    `&daily=precipitation_probability_mean,precipitation_sum` +
+    `&timezone=Australia/Sydney`;
+
   const res = await fetch(url);
+  if (!res.ok) throw new Error("API failed");
 
-  if (!res.ok) {
-    throw new Error(`OpenWeather failed: ${res.status}`);
-  }
+  const json = await res.json();
 
-  return res.json();
+  return json.daily.time.map((date, i) => ({
+    date,
+    pop: json.daily.precipitation_probability_mean?.[i] ?? 0,
+    precip_mm: json.daily.precipitation_sum?.[i] ?? 0,
+  })).slice(0, DAYS);
 }
 
-(async () => {
-  const payload = [];
-  let count = 0;
+/* ==============================
+   MAIN
+============================== */
 
-  for (const loc of locations) {
-    if (count >= MAX_LOCATIONS) break;
+const payload = [];
 
-    if (!loc.lat || !loc.lon) {
-      console.log("⏭ Skipping invalid location", loc);
-      continue;
-    }
+for (const loc of batch) {
+  if (!loc.lat || !loc.lon) continue;
 
-    const label = loc.label || loc.name || "Unknown";
+  console.log(`🌤 Fetching: ${loc.name}`);
 
-    try {
-      console.log(`🌤 Fetching: ${label}`);
+  try {
+    const daily = await fetchWeather(loc.lat, loc.lon);
 
-      const data = await fetchWeather(loc.lat, loc.lon);
+    payload.push({
+      lat: Number(loc.lat.toFixed(4)),
+      lon: Number(loc.lon.toFixed(4)),
+      daily,
+    });
 
-      if (!data.daily || !data.daily.length) {
-        console.log(`⚠ No daily data for ${label}`);
-        continue;
-      }
-
-      payload.push({
-        lat: loc.lat,
-        lon: loc.lon,
-        daily: data.daily.slice(0, DAYS),
-      });
-
-      count++;
-
-      await new Promise(r => setTimeout(r, DELAY_MS));
-
-    } catch (e) {
-      console.log(`⚠ ${label} failed → ${e.message}`);
-    }
+    await new Promise(r => setTimeout(r, DELAY_MS));
+  } catch (e) {
+    console.error(`❌ Failed: ${loc.name}`);
   }
+}
 
-  if (!payload.length) {
-    console.log("⚠ No data fetched — exiting safely");
-    process.exit(0); // ✅ IMPORTANT
-  }
+/* ==============================
+   PUSH TO WORDPRESS
+============================== */
 
-  console.log(`📤 Sending ${payload.length} locations to WordPress`);
+console.log(`📦 Sending ${payload.length} locations to WordPress`);
 
-  const res = await fetch(WP_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-cwf-secret": WP_SECRET,
-    },
-    body: JSON.stringify(payload),
-  });
+const res = await fetch(WORDPRESS_ENDPOINT, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "x-cwf-secret": SECRET,
+  },
+  body: JSON.stringify(payload),
+});
 
-  const text = await res.text();
-  console.log("✅ WP response:", text);
-
-  process.exit(0);
-})();
+const text = await res.text();
+console.log("✅ WP response:", text);
