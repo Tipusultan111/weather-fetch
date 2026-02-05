@@ -1,15 +1,15 @@
-import fs from "fs";
-import fetch from "node-fetch";
+const fs = require("fs");
+const fetch = require("node-fetch");
 
 /* ==============================
    CONFIG
 ============================== */
 
-const WORDPRESS_ENDPOINT = process.env.WP_ENDPOINT; // https://site.com/wp-json/cwf/v1/push
+const WORDPRESS_ENDPOINT = process.env.WP_ENDPOINT;
 const SECRET = process.env.CWF_SECRET;
 
-const BATCH_SIZE = 10;            // per run (safe)
-const DELAY_MS = 1200;            // rate-limit safety
+const BATCH_SIZE = 10;
+const DELAY_MS = 1200;
 const DAYS = 8;
 
 /* ==============================
@@ -21,7 +21,7 @@ const locations = JSON.parse(
 );
 
 /* ==============================
-   BATCH OFFSET (RESUME SUPPORT)
+   BATCH OFFSET
 ============================== */
 
 const START_INDEX = Number(process.env.START || 0);
@@ -32,7 +32,9 @@ if (!batch.length) {
   process.exit(0);
 }
 
-console.log(`🚀 Processing locations ${START_INDEX} → ${START_INDEX + batch.length - 1}`);
+console.log(
+  `🚀 Processing locations ${START_INDEX} → ${START_INDEX + batch.length - 1}`
+);
 
 /* ==============================
    WEATHER FETCH
@@ -61,42 +63,40 @@ async function fetchWeather(lat, lon) {
    MAIN
 ============================== */
 
-const payload = [];
+(async () => {
+  const payload = [];
 
-for (const loc of batch) {
-  if (!loc.lat || !loc.lon) continue;
+  for (const loc of batch) {
+    if (!loc.lat || !loc.lon) continue;
 
-  console.log(`🌤 Fetching: ${loc.name}`);
+    console.log(`🌤 Fetching: ${loc.name}`);
 
-  try {
-    const daily = await fetchWeather(loc.lat, loc.lon);
+    try {
+      const daily = await fetchWeather(loc.lat, loc.lon);
 
-    payload.push({
-      lat: Number(loc.lat.toFixed(4)),
-      lon: Number(loc.lon.toFixed(4)),
-      daily,
-    });
+      payload.push({
+        lat: Number(Number(loc.lat).toFixed(4)),
+        lon: Number(Number(loc.lon).toFixed(4)),
+        daily,
+      });
 
-    await new Promise(r => setTimeout(r, DELAY_MS));
-  } catch (e) {
-    console.error(`❌ Failed: ${loc.name}`);
+      await new Promise(r => setTimeout(r, DELAY_MS));
+    } catch (e) {
+      console.error(`❌ Failed: ${loc.name}`);
+    }
   }
-}
 
-/* ==============================
-   PUSH TO WORDPRESS
-============================== */
+  console.log(`📦 Sending ${payload.length} locations to WordPress`);
 
-console.log(`📦 Sending ${payload.length} locations to WordPress`);
+  const res = await fetch(WORDPRESS_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-cwf-secret": SECRET,
+    },
+    body: JSON.stringify(payload),
+  });
 
-const res = await fetch(WORDPRESS_ENDPOINT, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "x-cwf-secret": SECRET,
-  },
-  body: JSON.stringify(payload),
-});
-
-const text = await res.text();
-console.log("✅ WP response:", text);
+  const text = await res.text();
+  console.log("✅ WP response:", text);
+})();
