@@ -84,3 +84,5 @@ async function fetchWeather(lat, lon) {
   process.exit(0);
 
 })();
+console.log("WP_ENDPOINT:", process.env.WP_ENDPOINT);
+console.log("WP_SECRET:", process.env.WP_SECRET);
