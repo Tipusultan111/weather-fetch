@@ -16,11 +16,10 @@ jobs:
         with:
           node-version: 18
 
-      - name: Install dependencies
-        run: npm install node-fetch@2
+      - run: npm install node-fetch@2
 
-      - name: Run fetch
+      - name: Run Fetch
         env:
           WP_ENDPOINT: ${{ secrets.WP_ENDPOINT }}
-          WP_SECRET: ${{ secrets.WP_SECRET }}
+          CWF_SECRET: ${{ secrets.CWF_SECRET }}
         run: node fetch.js
