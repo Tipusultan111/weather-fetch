@@ -21,7 +21,6 @@ jobs:
 
       - name: Run fetch
         env:
-          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
           WP_ENDPOINT: ${{ secrets.WP_ENDPOINT }}
           WP_SECRET: ${{ secrets.WP_SECRET }}
         run: node fetch.js
