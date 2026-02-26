@@ -13,28 +13,46 @@ const locations = JSON.parse(
   fs.readFileSync("./locations.json", "utf8")
 );
 
-// You can change batch size if needed
-const BATCH = locations.slice(0, 10);
+const STATE_FILE = "./batch-state.json";
+const BATCH_SIZE = 10;
+
+/* -----------------------------
+   LOAD STATE
+------------------------------ */
+
+let offset = 0;
+
+if (fs.existsSync(STATE_FILE)) {
+  const state = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
+  offset = state.offset || 0;
+}
+
+console.log("Current Offset:", offset);
+
+/* -----------------------------
+   PREPARE BATCH
+------------------------------ */
+
+let batch = locations.slice(offset, offset + BATCH_SIZE);
+
+if (batch.length === 0) {
+  offset = 0;
+  batch = locations.slice(0, BATCH_SIZE);
+}
 
 async function getWeather(lat, lon) {
 
   const url =
-  `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-  `&daily=precipitation_probability_mean,precipitation_sum` +
-  `&forecast_days=8` +
-  `&timezone=Australia/Sydney`;
+    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+    `&daily=precipitation_probability_mean,precipitation_sum` +
+    `&forecast_days=8` +
+    `&timezone=Australia/Sydney`;
 
   const res = await fetch(url);
 
-  if (!res.ok) {
-    throw new Error("Weather API failed");
-  }
+  if (!res.ok) throw new Error("Weather API failed");
 
   const json = await res.json();
-
-  if (!json.daily || !json.daily.time) {
-    throw new Error("Invalid weather response");
-  }
 
   return json.daily.time.map((d, i) => ({
     date: d,
@@ -43,11 +61,15 @@ async function getWeather(lat, lon) {
   }));
 }
 
+/* -----------------------------
+   MAIN
+------------------------------ */
+
 (async () => {
 
   const payload = [];
 
-  for (const loc of BATCH) {
+  for (const loc of batch) {
 
     console.log("Fetching:", loc.name);
 
@@ -75,9 +97,7 @@ async function getWeather(lat, lon) {
         "Content-Type": "application/json",
         "x-cwf-secret": SECRET
       },
-      body: JSON.stringify({
-        data: payload   // ✅ FIXED STRUCTURE
-      })
+      body: JSON.stringify({ data: payload })
     });
 
     const text = await res.text();
@@ -88,6 +108,24 @@ async function getWeather(lat, lon) {
     }
 
     console.log("✅ SUCCESS:", text);
+
+    /* -----------------------------
+       UPDATE OFFSET
+    ------------------------------ */
+
+    offset += BATCH_SIZE;
+
+    if (offset >= locations.length) {
+      offset = 0;
+    }
+
+    fs.writeFileSync(
+      STATE_FILE,
+      JSON.stringify({ offset }, null, 2)
+    );
+
+    console.log("Next Offset:", offset);
+
     process.exit(0);
 
   } catch (err) {
