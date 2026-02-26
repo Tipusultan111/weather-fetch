@@ -19,9 +19,10 @@ const BATCH = locations.slice(0, 10);
 async function getWeather(lat, lon) {
 
   const url =
-    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-    `&daily=precipitation_probability_mean,precipitation_sum` +
-    `&timezone=Australia/Sydney`;
+  `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+  `&daily=precipitation_probability_mean,precipitation_sum` +
+  `&forecast_days=8` +
+  `&timezone=Australia/Sydney`;
 
   const res = await fetch(url);
 
