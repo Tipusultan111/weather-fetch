@@ -10,16 +10,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 18
 
-      - run: npm install node-fetch@2
+      - name: Install Dependencies
+        run: npm install node-fetch@2
 
-      - name: Run Fetch
+      - name: Run Fetch Script
+        run: node fetch.js
         env:
           WP_ENDPOINT: ${{ secrets.WP_ENDPOINT }}
           CWF_SECRET: ${{ secrets.CWF_SECRET }}
-        run: node fetch.js
+
+      - name: Commit Updated Batch State
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add batch-state.json
+          git commit -m "Update batch offset" || echo "No changes"
+          git push
