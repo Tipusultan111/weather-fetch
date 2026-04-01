@@ -14,7 +14,7 @@ const locations = JSON.parse(
 );
 
 const STATE_FILE = "./batch-state.json";
-const BATCH_SIZE = 10;
+const BATCH_SIZE = 50;
 
 /* -----------------------------
    LOAD STATE
