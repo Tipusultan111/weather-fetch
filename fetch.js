@@ -1,138 +1,138 @@
-const fs = require("fs");
-const fetch = require("node-fetch");
+// const fs = require("fs");
+// const fetch = require("node-fetch");
 
-const ENDPOINT = process.env.WP_ENDPOINT;
-const SECRET   = process.env.CWF_SECRET;
+// const ENDPOINT = process.env.WP_ENDPOINT;
+// const SECRET   = process.env.CWF_SECRET;
 
-if (!ENDPOINT || !SECRET) {
-  console.error("❌ Missing WP_ENDPOINT or CWF_SECRET");
-  process.exit(1);
-}
+// if (!ENDPOINT || !SECRET) {
+//   console.error("❌ Missing WP_ENDPOINT or CWF_SECRET");
+//   process.exit(1);
+// }
 
-const locations = JSON.parse(
-  fs.readFileSync("./locations.json", "utf8")
-);
+// const locations = JSON.parse(
+//   fs.readFileSync("./locations.json", "utf8")
+// );
 
-const STATE_FILE = "./batch-state.json";
-const BATCH_SIZE = 50;
+// const STATE_FILE = "./batch-state.json";
+// const BATCH_SIZE = 50;
 
-/* -----------------------------
-   LOAD STATE
------------------------------- */
+// /* -----------------------------
+//    LOAD STATE
+// ------------------------------ */
 
-let offset = 0;
+// let offset = 0;
 
-if (fs.existsSync(STATE_FILE)) {
-  const state = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
-  offset = state.offset || 0;
-}
+// if (fs.existsSync(STATE_FILE)) {
+//   const state = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
+//   offset = state.offset || 0;
+// }
 
-console.log("Current Offset:", offset);
+// console.log("Current Offset:", offset);
 
-/* -----------------------------
-   PREPARE BATCH
------------------------------- */
+// /* -----------------------------
+//    PREPARE BATCH
+// ------------------------------ */
 
-let batch = locations.slice(offset, offset + BATCH_SIZE);
+// let batch = locations.slice(offset, offset + BATCH_SIZE);
 
-if (batch.length === 0) {
-  offset = 0;
-  batch = locations.slice(0, BATCH_SIZE);
-}
+// if (batch.length === 0) {
+//   offset = 0;
+//   batch = locations.slice(0, BATCH_SIZE);
+// }
 
-async function getWeather(lat, lon) {
+// async function getWeather(lat, lon) {
 
-  const url =
-    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
-    `&daily=precipitation_probability_mean,precipitation_sum` +
-    `&forecast_days=8` +
-    `&timezone=Australia/Sydney`;
+//   const url =
+//     `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+//     `&daily=precipitation_probability_mean,precipitation_sum` +
+//     `&forecast_days=8` +
+//     `&timezone=Australia/Sydney`;
 
-  const res = await fetch(url);
+//   const res = await fetch(url);
 
-  if (!res.ok) throw new Error("Weather API failed");
+//   if (!res.ok) throw new Error("Weather API failed");
 
-  const json = await res.json();
+//   const json = await res.json();
 
-  return json.daily.time.map((d, i) => ({
-    date: d,
-    pop: json.daily.precipitation_probability_mean?.[i] ?? 0,
-    mm:  json.daily.precipitation_sum?.[i] ?? 0
-  }));
-}
+//   return json.daily.time.map((d, i) => ({
+//     date: d,
+//     pop: json.daily.precipitation_probability_mean?.[i] ?? 0,
+//     mm:  json.daily.precipitation_sum?.[i] ?? 0
+//   }));
+// }
 
-/* -----------------------------
-   MAIN
------------------------------- */
+// /* -----------------------------
+//    MAIN
+// ------------------------------ */
 
-(async () => {
+// (async () => {
 
-  const payload = [];
+//   const payload = [];
 
-  for (const loc of batch) {
+//   for (const loc of batch) {
 
-    console.log("Fetching:", loc.name);
+//     console.log("Fetching:", loc.name);
 
-    try {
-      const daily = await getWeather(loc.lat, loc.lon);
+//     try {
+//       const daily = await getWeather(loc.lat, loc.lon);
 
-      payload.push({
-        lat: Number(loc.lat.toFixed(4)),
-        lon: Number(loc.lon.toFixed(4)),
-        daily
-      });
+//       payload.push({
+//         lat: Number(loc.lat.toFixed(4)),
+//         lon: Number(loc.lon.toFixed(4)),
+//         daily
+//       });
 
-    } catch (e) {
-      console.log("Fail:", loc.name);
-    }
-  }
+//     } catch (e) {
+//       console.log("Fail:", loc.name);
+//     }
+//   }
 
-  console.log("Sending:", payload.length);
+//   console.log("Sending:", payload.length);
 
-  try {
+//   try {
 
-    const res = await fetch(ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-cwf-secret": SECRET
-      },
-      body: JSON.stringify({ data: payload })
-    });
+//     const res = await fetch(ENDPOINT, {
+//       method: "POST",
+//       headers: {
+//         "Content-Type": "application/json",
+//         "x-cwf-secret": SECRET
+//       },
+//       body: JSON.stringify({ data: payload })
+//     });
 
-    const text = await res.text();
+//     const text = await res.text();
 
-    if (!res.ok) {
-      console.error("❌ WP ERROR:", text);
-      process.exit(1);
-    }
+//     if (!res.ok) {
+//       console.error("❌ WP ERROR:", text);
+//       process.exit(1);
+//     }
 
-    console.log("✅ SUCCESS:", text);
+//     console.log("✅ SUCCESS:", text);
 
-    /* -----------------------------
-       UPDATE OFFSET
-    ------------------------------ */
+//     /* -----------------------------
+//        UPDATE OFFSET
+//     ------------------------------ */
 
-    offset += BATCH_SIZE;
+//     offset += BATCH_SIZE;
 
-    if (offset >= locations.length) {
-      offset = 0;
-    }
+//     if (offset >= locations.length) {
+//       offset = 0;
+//     }
 
-    fs.writeFileSync(
-      STATE_FILE,
-      JSON.stringify({ offset }, null, 2)
-    );
+//     fs.writeFileSync(
+//       STATE_FILE,
+//       JSON.stringify({ offset }, null, 2)
+//     );
 
-    console.log("Next Offset:", offset);
+//     console.log("Next Offset:", offset);
 
-    process.exit(0);
+//     process.exit(0);
 
-  } catch (err) {
+//   } catch (err) {
 
-    console.error("❌ Network Error:", err.message);
-    process.exit(1);
+//     console.error("❌ Network Error:", err.message);
+//     process.exit(1);
 
-  }
+//   }
 
-})();
+// })();
